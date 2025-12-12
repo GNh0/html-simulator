@@ -3,31 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HTML Simulator (Bootstrap Edition)</title>
-    <!-- Bootstrap 5 CSS -->
+    <title>HTML Simulator v29</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="style.css?v=2">
 </head>
-<body class="bg-light">
+<body class="bg-dark">
 
-    <!-- 네비게이션 바 -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-3 shadow-sm">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark border-bottom border-secondary mb-0 shadow-sm" style="height: 50px;">
         <div class="container-fluid">
-            <a class="navbar-brand fw-bold" href="#"><i class="bi bi-code-square me-2"></i>HTML Simulator <span class="badge bg-primary fs-6">v29</span></a>
+            <a class="navbar-brand fw-bold fs-6" href="#"><i class="bi bi-code-square me-2"></i>HTML Simulator <span class="badge bg-primary rounded-pill" style="font-size: 0.7em;">v29</span></a>
         </div>
     </nav>
 
-    <div class="container-fluid h-100 d-flex flex-column pb-3">
-        <div class="row flex-grow-1 g-3">
+    <div class="container-fluid h-100 p-3 pt-2">
+        <div class="row h-100 g-3">
             
-            <!-- [Left Panel] Source Code -->
-            <div class="col-lg-5 d-flex flex-column">
-                <div class="card h-100 shadow-sm border-0">
+            <!-- Left Panel: Source Code -->
+            <div class="col-lg-5 h-100">
+                <div class="card h-100 shadow-sm border-0 rounded-3 overflow-hidden">
                     <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center border-bottom">
-                        <h6 class="m-0 fw-bold text-secondary"><i class="bi bi-file-earmark-code me-1"></i>Source Code</h6>
+                        <h6 class="m-0 fw-bold text-secondary fs-6"><i class="bi bi-file-earmark-code me-1"></i>Source Code</h6>
                         <div class="btn-group btn-group-sm">
                             <input type="file" id="fileInput" accept=".html,.txt" class="d-none" />
                             <button class="btn btn-outline-secondary" onclick="document.getElementById('fileInput').click()">
@@ -38,46 +34,33 @@
                             </button>
                         </div>
                     </div>
-                    <div class="card-body p-0 position-relative">
-                        <textarea id="sourceInput" class="form-control h-100 border-0 rounded-0 code-editor" placeholder="HTML 소스를 붙여넣거나 파일을 드래그하세요."></textarea>
+                    <div class="card-body p-0">
+                        <textarea id="sourceInput" class="code-editor form-control border-0 rounded-0" placeholder="HTML 소스를 붙여넣거나 파일을 드래그하세요."></textarea>
                     </div>
                 </div>
             </div>
 
-            <!-- [Right Panel] Preview -->
-            <div class="col-lg-7 d-flex flex-column">
-                <div class="card h-100 shadow-sm border-0">
-                    <div class="card-header bg-white py-2 d-flex flex-wrap justify-content-between align-items-center border-bottom gap-2">
-                        <h6 class="m-0 fw-bold text-secondary"><i class="bi bi-eye me-1"></i>Preview</h6>
-                        
+            <!-- Right Panel: Preview -->
+            <div class="col-lg-7 h-100">
+                <div class="card h-100 shadow-sm border-0 rounded-3 overflow-hidden">
+                    <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center border-bottom">
+                        <h6 class="m-0 fw-bold text-secondary fs-6"><i class="bi bi-eye me-1"></i>Preview</h6>
                         <div class="d-flex gap-2 align-items-center">
-                            <!-- Export Group -->
+                            <!-- Action Buttons -->
                             <div class="btn-group btn-group-sm">
-                                <button class="btn btn-outline-dark" onclick="copyPreviewHTML()" title="HTML 복사">
-                                    <i class="bi bi-clipboard"></i> HTML
-                                </button>
-                                <button class="btn btn-outline-indigo" onclick="exportToCSharp()" title="C# 변환">
-                                    <i class="bi bi-filetype-cs"></i> C#
-                                </button>
+                                <button class="btn btn-outline-dark" onclick="copyPreviewHTML()" title="HTML 복사"><i class="bi bi-clipboard"></i> HTML</button>
+                                <button class="btn btn-outline-indigo" onclick="exportToCSharp()" title="C# 변환"><i class="bi bi-filetype-cs"></i> C#</button>
+                                <button class="btn btn-outline-secondary" onclick="printPreview()" title="인쇄 및 PDF 저장"><i class="bi bi-printer"></i> 인쇄</button>
                             </div>
-
-                            <div class="vr mx-1"></div>
-
-                            <!-- Action Group -->
-                            <div class="btn-group btn-group-sm">
-                                <button class="btn btn-success" onclick="calculateAll()">
-                                    <i class="bi bi-arrow-repeat"></i> 재계산
-                                </button>
-                            </div>
+                            <button class="btn btn-success btn-sm" onclick="calculateAll()"><i class="bi bi-arrow-repeat"></i> 재계산</button>
                         </div>
                     </div>
-                    
-                    <!-- Preview Area -->
-                    <div class="card-body p-0 bg-light overflow-auto d-flex justify-content-center align-items-start pt-4 preview-wrapper">
-                        <div id="previewContent" class="bg-white shadow-sm p-4" tabindex="0"></div>
+                    <div class="card-body p-0 position-relative">
+                        <div class="preview-wrapper">
+                            <div id="previewContent" tabindex="0"></div>
+                        </div>
                     </div>
-                    
-                    <div class="card-footer bg-white py-1 text-muted text-end" style="font-size: 0.8rem;">
+                    <div class="card-footer bg-white py-1 text-muted text-end border-top" style="font-size: 11px;">
                         <i class="bi bi-info-circle me-1"></i> Ctrl+Z: 취소 / Ctrl+Y: 재실행 / Del: 삭제 / 드래그: 리사이징
                     </div>
                 </div>
@@ -87,7 +70,6 @@
     </div>
 
     <script src="script.js"></script>
-    <!-- Bootstrap JS (Optional for tooltips etc) -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
