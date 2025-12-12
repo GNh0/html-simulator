@@ -8,7 +8,7 @@ let isDragging = false;
 let startCell = null;
 let currentTable = null;
 
-// [NEW] Resizing State Variables
+// [Resizing Variables]
 let isResizing = false;
 let resizeType = null;      
 let resizeTarget = null;    
@@ -65,13 +65,9 @@ if(sourceInput) {
 function renderCode() {
     if(!sourceInput.value.trim()) { previewDiv.innerHTML = ""; return; }
     
-    // [안전장치] HTML 파싱 에러 방지를 위해 임시 div 사용
+    // HTML 파싱 에러 방지
     const tempContainer = document.createElement('div');
     tempContainer.innerHTML = sourceInput.value;
-    
-    // 테이블 레이아웃 강제 교정 (선택사항)
-    // tempContainer.querySelectorAll('table').forEach(tbl => tbl.style.tableLayout = 'fixed');
-    
     previewDiv.innerHTML = tempContainer.innerHTML;
     
     historyStack.length = 0; historyIndex = -1; saveHistory();
@@ -130,8 +126,6 @@ document.addEventListener('mousemove', (e) => {
     if (!isResizing || !resizeTarget) return;
 
     let newPixelVal = 0;
-    
-    // 1. 변화량 계산
     if (resizeType === 'col') {
         const diff = e.clientX - resizeStartPos;
         newPixelVal = Math.max(10, resizeStartVal + diff);
@@ -140,7 +134,6 @@ document.addEventListener('mousemove', (e) => {
         newPixelVal = Math.max(10, resizeStartVal + diff);
     }
 
-    // 2. 적용 (style.width + width 속성 + col 태그)
     let finalVal = '';
     if (resizeUnit === '%') {
         const newPercent = (newPixelVal / resizeParentSize) * 100;
@@ -152,8 +145,6 @@ document.addEventListener('mousemove', (e) => {
     if (resizeType === 'col') {
         resizeTarget.style.width = finalVal;
         resizeTarget.setAttribute('width', finalVal); 
-        
-        // [안전장치] <col> 태그가 존재할 때만 변경
         if(targetColElement && targetColElement.parentNode) {
             targetColElement.style.width = finalVal;
             targetColElement.setAttribute('width', finalVal);
@@ -179,7 +170,6 @@ function attachEvents(container) {
     tables.forEach(table => {
         initCoordinates(table); updateTooltips();
 
-        // 1. Mouse Move (Resize Detection)
         table.addEventListener('mousemove', function(e) {
             if (isResizing) return;
             const td = e.target.closest('td');
@@ -189,31 +179,23 @@ function attachEvents(container) {
             const bottomDist = Math.abs(rect.bottom - e.clientY);
             const sensitive = 5;
 
-            td.removeAttribute('data-resize-col');
-            td.removeAttribute('data-resize-row');
-            table.style.cursor = '';
+            td.removeAttribute('data-resize-col'); td.removeAttribute('data-resize-row'); table.style.cursor = '';
 
-            // 오른쪽 끝 감지
             if (rightDist <= sensitive) {
                 td.setAttribute('data-resize-col', 'true'); table.style.cursor = 'col-resize';
-            } 
-            // 아래쪽 끝 감지
-            else if (bottomDist <= sensitive) {
+            } else if (bottomDist <= sensitive) {
                 td.setAttribute('data-resize-row', 'true'); table.style.cursor = 'row-resize';
             }
         });
 
-        // 2. Mouse Down (Start Resize vs Drag)
         table.addEventListener('mousedown', function(e) {
             const td = e.target.closest('td');
             if (!td) return;
 
-            // [Resizing Start]
             if (td.getAttribute('data-resize-col') === 'true') {
                 isResizing = true; resizeType = 'col'; resizeTarget = td;
                 resizeStartVal = td.getBoundingClientRect().width; 
                 resizeStartPos = e.clientX;
-                
                 targetColElement = null;
                 const colIdx = parseInt(td.getAttribute('data-col'));
                 const colgroup = table.querySelector('colgroup');
@@ -221,42 +203,27 @@ function attachEvents(container) {
                     const cols = colgroup.querySelectorAll('col');
                     if(cols[colIdx]) targetColElement = cols[colIdx];
                 }
-
                 if (td.style.width && td.style.width.includes('%')) {
-                    resizeUnit = '%';
-                    resizeParentSize = table.getBoundingClientRect().width;
-                } else {
-                    resizeUnit = 'px';
-                }
-
-                document.body.classList.add('is-resizing', 'is-resizing-col');
-                e.preventDefault(); return;
+                    resizeUnit = '%'; resizeParentSize = table.getBoundingClientRect().width;
+                } else { resizeUnit = 'px'; }
+                document.body.classList.add('is-resizing', 'is-resizing-col'); e.preventDefault(); return;
             }
 
             if (td.getAttribute('data-resize-row') === 'true') {
                 isResizing = true; resizeType = 'row'; resizeTarget = td;
                 resizeStartVal = td.getBoundingClientRect().height;
                 resizeStartPos = e.clientY;
-
                 if (td.style.height && td.style.height.includes('%')) {
-                    resizeUnit = '%';
-                    resizeParentSize = table.getBoundingClientRect().height;
-                } else {
-                    resizeUnit = 'px';
-                }
-
-                document.body.classList.add('is-resizing', 'is-resizing-row');
-                e.preventDefault(); return;
+                    resizeUnit = '%'; resizeParentSize = table.getBoundingClientRect().height;
+                } else { resizeUnit = 'px'; }
+                document.body.classList.add('is-resizing', 'is-resizing-row'); e.preventDefault(); return;
             }
 
-            // [Cell Selection]
             container.querySelectorAll('.selected-cell').forEach(c => c.classList.remove('selected-cell'));
             const editing = container.querySelector('.editing-cell');
             if (editing && editing !== td) finishEdit(editing);
             isDragging = true; startCell = td; currentTable = table;
             selectCell(td); 
-            // [수정] 포커스 강제 이동 제거 (스크롤 튐 방지)
-            // previewDiv.focus(); 
         });
 
         table.addEventListener('mouseover', function(e) {
@@ -370,3 +337,61 @@ function exportToCSharp() {
     });
     navigator.clipboard.writeText(code).then(() => alert("C# 코드 복사 완료.")).catch(()=>alert("실패"));
 }
+
+// [최종 수정] 딜레이 삭제 + 취소 시 자동 닫기 기능 추가
+function printPreview() {
+    if(!previewDiv.innerHTML.trim()) { alert("인쇄할 내용이 없습니다."); return; }
+
+    // 팝업 생성
+    const printWindow = window.open('', '_blank', 'width=1000,height=800');
+    if (!printWindow) { alert("팝업 차단을 해제해주세요."); return; }
+
+    const content = previewDiv.innerHTML;
+
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>인쇄 미리보기</title>
+            <style>
+                body { font-family: 'Pretendard', sans-serif; margin: 0; padding: 0; }
+                
+                /* 테이블 스타일 복구 */
+                table { border-collapse: collapse; width: 100% !important; margin: 0 auto; }
+                td, th { border: 1px solid #dee2e6; padding: 4px; font-size: 12px; }
+
+                /* [중요] 배경색 강제 출력 */
+                * {
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                }
+                
+                /* 인쇄용 페이지 설정 */
+                @page { size: A4; margin: 10mm; }
+                body { width: 100%; }
+            </style>
+        </head>
+        <body>
+            <div class="print-content">
+                ${content}
+            </div>
+            <script>
+                window.onload = function() {
+                    window.focus();
+                    // 딜레이 없이 바로 인쇄 실행
+                    window.print();
+                };
+
+                // [핵심] 인쇄 대화상자가 닫히면(인쇄했든 취소했든) 팝업창도 닫아라
+                window.onafterprint = function() {
+                    window.close();
+                };
+            <\/script>
+        </body>
+        </html>
+    `);
+    
+    printWindow.document.close();
+}
+
+
