@@ -2,10 +2,11 @@
 body {
     font-family: 'Pretendard', 'Malgun Gothic', system-ui, -apple-system, sans-serif;
     height: 100vh;
-    overflow: hidden; /* 전체 스크롤 방지 */
+    overflow: hidden; 
+    background-color: #212529; /* Dark Background */
 }
 
-/* 모바일/태블릿: 전체 스크롤 허용 */
+/* Mobile Responsive */
 @media (max-width: 991.98px) {
     body { height: auto; overflow: auto; }
     .container-fluid { height: auto !important; padding-bottom: 20px; }
@@ -13,67 +14,37 @@ body {
     .col-lg-5, .col-lg-7 { height: 600px; margin-bottom: 20px; } 
 }
 
-/* --- Layout Fixes for Full Height --- */
-/* 컨테이너가 화면 꽉 차게 */
-.container-fluid {
-    height: 100%;
-}
-/* Row가 남은 공간을 다 쓰도록 */
-.row.flex-grow-1 {
-    min-height: 0; /* Flexbox overflow fix */
-}
-/* 컬럼 내부 카드도 꽉 차게 */
-.col-lg-5, .col-lg-7 {
-    height: 100%;
-}
-.card {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
+/* --- Layout & Scroll Fixes --- */
+.container-fluid { height: 100%; }
+.row.h-100 { min-height: 0; }
+.col-lg-5, .col-lg-7 { height: 100%; }
+.card { height: 100%; display: flex; flex-direction: column; }
+.card-header { flex: 0 0 auto; }
+.card-body { 
+    flex: 1 1 auto; 
+    min-height: 0; 
+    overflow: hidden; 
+    position: relative; 
+    display: flex; 
+    flex-direction: column; 
 }
 
-/* --- Editor Styles (좌측 소스창) --- */
-/* 카드 헤더 고정, 바디는 남은 공간 차지 + 스크롤 */
-.card-header {
-    flex: 0 0 auto; /* 높이 고정 */
-}
-.card-body {
-    flex: 1 1 auto; /* 남은 높이 차지 */
-    min-height: 0;  /* Flex 자식 스크롤 버그 수정 */
-    overflow: hidden; /* 내부 요소가 스크롤 담당 */
-    position: relative;
-}
-
+/* --- Editor Styles --- */
 .code-editor {
-    font-family: 'D2Coding', 'Consolas', monospace;
-    font-size: 13px;
-    line-height: 1.6;
-    resize: none;
-    background-color: #f8f9fa;
-    width: 100%;
-    height: 100%; /* 부모(card-body) 꽉 채우기 */
-    border: none;
-    padding: 15px;
-    box-sizing: border-box;
-    overflow-y: auto; /* 세로 스크롤 허용 */
+    width: 100%; height: 100%; 
+    resize: none; border: none; padding: 15px; box-sizing: border-box;
+    font-family: 'D2Coding', 'Consolas', monospace; font-size: 13px; line-height: 1.6;
+    background-color: #f8f9fa; outline: none; overflow-y: auto;
 }
-.code-editor:focus {
-    box-shadow: none;
-    background-color: #fff;
-    outline: none;
-}
-.code-editor.drag-over {
-    background-color: #e8f0fe;
-    border: 2px dashed #0d6efd !important;
-}
+.code-editor:focus { background-color: #fff; }
+.code-editor.drag-over { background-color: #e8f0fe; border: 2px dashed #0d6efd !important; }
 
-/* --- Preview Styles (우측 미리보기창) --- */
+/* --- Preview Styles --- */
 .preview-wrapper {
-    width: 100%;
-    height: 100%;
-    overflow: auto; /* 스크롤바 생성 위치 */
+    flex: 1; overflow: auto; 
     background-color: #e9ecef;
-    /* 투명 배경 체크무늬 패턴 */
+    width: 100%; height: 100%;
+    /* Transparent Grid Pattern */
     background-image:
         linear-gradient(45deg, #dee2e6 25%, transparent 25%),
         linear-gradient(-45deg, #dee2e6 25%, transparent 25%),
@@ -82,48 +53,40 @@ body {
     background-size: 20px 20px;
     background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
     padding: 20px;
+    display: flex; justify-content: center; align-items: flex-start;
 }
 
 #previewContent {
-    min-width: 210mm; /* A4 용지 너비 */
-    min-height: 297mm; /* A4 용지 높이 */
+    min-width: 210mm; /* A4 Width */
+    min-height: 297mm; /* A4 Height */
     background: white;
     box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-    margin: auto; /* 중앙 정렬 */
     padding: 40px;
     outline: none;
 }
 
-/* --- Custom Button Color --- */
-.btn-outline-indigo {
-    color: #6610f2;
-    border-color: #6610f2;
-}
-.btn-outline-indigo:hover {
-    color: #fff;
-    background-color: #6610f2;
-}
+/* --- Components --- */
+.btn-outline-indigo { color: #6610f2; border-color: #6610f2; }
+.btn-outline-indigo:hover { color: #fff; background-color: #6610f2; }
 
-/* --- Table Styles --- */
+/* --- Table & Interaction --- */
 table { border-collapse: collapse; user-select: none; cursor: default; margin: 0 auto; }
 td { 
     border: 1px solid #dee2e6;
-    min-width: 50px; height: 28px; padding: 4px; 
+    min-width: 30px; padding: 4px; 
     font-size: 12px; transition: background 0.1s; position: relative; 
 }
 td.selected-cell { background-color: #cfe2ff !important; border: 1px double #0d6efd; z-index: 1; }
-td.editing-cell { 
-    background-color: #fff !important; outline: 2px solid #0d6efd; 
-    user-select: text; cursor: text; z-index: 2;
-}
+td.editing-cell { background-color: #fff !important; outline: 2px solid #0d6efd; user-select: text; cursor: text; z-index: 2; }
 
-/* --- Resizing & Tooltip --- */
+/* Resizing Cursors */
 body.is-resizing { user-select: none; }
 body.is-resizing-col { cursor: col-resize !important; }
 body.is-resizing-row { cursor: row-resize !important; }
 td[data-resize-col='true'] { cursor: col-resize; }
 td[data-resize-row='true'] { cursor: row-resize; }
 
+/* Tooltip */
 td[data-tooltip]:hover::after {
     content: attr(data-tooltip); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
     background: rgba(33, 37, 41, 0.95); color: #fff; padding: 6px 10px; 
@@ -135,4 +98,49 @@ td[data-tooltip]:hover::before {
     content: ''; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
     border: 5px solid transparent; border-top-color: rgba(33, 37, 41, 0.95); 
     margin-bottom: -4px; z-index: 2000;
+}
+
+/* --- [FIXED] PRINT & PDF STYLES --- */
+@media print {
+    /* 1. 모든 요소를 일단 숨김 (공간 차지 X) */
+    body * {
+        visibility: hidden;
+    }
+
+    /* 2. Preview 영역과 그 자식들만 보이게 설정 */
+    #previewContent, #previewContent * {
+        visibility: visible;
+    }
+
+    /* 3. Preview 영역을 종이 전체 크기로 강제 배치 */
+    #previewContent {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100vw !important;  /* 뷰포트 너비 전체 사용 */
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+        box-shadow: none !important;
+        border: none !important;
+        z-index: 9999; /* 제일 위에 표시 */
+        
+        /* A4 가로폭에 맞게 자동 축소 (선택사항) */
+        /* zoom: 0.95; */
+    }
+
+    /* 4. 페이지 여백 및 배경색 설정 */
+    @page {
+        margin: 10mm; /* A4 기본 여백 */
+        size: A4;
+    }
+    
+    body {
+        margin: 0;
+        padding: 0;
+        background: white !important;
+        -webkit-print-color-adjust: exact !important; /* 배경색 출력 강제 */
+        print-color-adjust: exact !important;
+    }
 }
