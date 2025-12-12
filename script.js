@@ -1,6 +1,22 @@
+// --- DOM Elements ---
 const sourceInput = document.getElementById('sourceInput');
 const previewDiv = document.getElementById('previewContent');
 const fileInput = document.getElementById('fileInput');
+
+// --- Global State ---
+let isDragging = false;
+let startCell = null;
+let currentTable = null;
+
+// [NEW] Resizing State Variables
+let isResizing = false;
+let resizeType = null;      
+let resizeTarget = null;    
+let resizeStartVal = 0;     
+let resizeStartPos = 0;     
+let resizeUnit = 'px';      
+let resizeParentSize = 0;   
+let targetColElement = null; 
 
 // --- History Management ---
 const historyStack = [];
@@ -9,34 +25,25 @@ let isHistoryAction = false;
 
 function saveHistory() {
     if(isHistoryAction) return;
-    if(historyIndex < historyStack.length - 1) {
-        historyStack.splice(historyIndex + 1);
-    }
+    if(historyIndex < historyStack.length - 1) historyStack.splice(historyIndex + 1);
     historyStack.push(previewDiv.innerHTML);
     historyIndex++;
-    if(historyStack.length > 50) {
-        historyStack.shift();
-        historyIndex--;
-    }
+    if(historyStack.length > 50) { historyStack.shift(); historyIndex--; }
 }
 
 function undo() {
     if(historyIndex > 0) {
-        isHistoryAction = true;
-        historyIndex--;
+        isHistoryAction = true; historyIndex--;
         previewDiv.innerHTML = historyStack[historyIndex];
-        attachEvents(previewDiv);
-        isHistoryAction = false;
+        attachEvents(previewDiv); isHistoryAction = false;
     }
 }
 
 function redo() {
     if(historyIndex < historyStack.length - 1) {
-        isHistoryAction = true;
-        historyIndex++;
+        isHistoryAction = true; historyIndex++;
         previewDiv.innerHTML = historyStack[historyIndex];
-        attachEvents(previewDiv);
-        isHistoryAction = false;
+        attachEvents(previewDiv); isHistoryAction = false;
     }
 }
 
@@ -44,63 +51,54 @@ function redo() {
 function loadFile(file) {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = function(e) {
-        sourceInput.value = e.target.result;
-        renderCode(); 
-    };
+    reader.onload = function(e) { sourceInput.value = e.target.result; renderCode(); };
     reader.readAsText(file, 'UTF-8');
 }
-fileInput.addEventListener('change', (e) => { loadFile(e.target.files[0]); fileInput.value = ''; });
-sourceInput.addEventListener('dragover', (e) => { e.preventDefault(); sourceInput.classList.add('drag-over'); });
-sourceInput.addEventListener('dragleave', (e) => { e.preventDefault(); sourceInput.classList.remove('drag-over'); });
-sourceInput.addEventListener('drop', (e) => { 
-    e.preventDefault(); sourceInput.classList.remove('drag-over');
-    if(e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]); 
-});
+if(fileInput) fileInput.addEventListener('change', (e) => { loadFile(e.target.files[0]); fileInput.value = ''; });
+if(sourceInput) {
+    sourceInput.addEventListener('dragover', (e) => { e.preventDefault(); sourceInput.classList.add('drag-over'); });
+    sourceInput.addEventListener('dragleave', (e) => { e.preventDefault(); sourceInput.classList.remove('drag-over'); });
+    sourceInput.addEventListener('drop', (e) => { e.preventDefault(); sourceInput.classList.remove('drag-over'); if(e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]); });
+}
 
 // --- Core Functions ---
 function renderCode() {
     if(!sourceInput.value.trim()) { previewDiv.innerHTML = ""; return; }
-    previewDiv.innerHTML = sourceInput.value;
     
-    // History Init
-    historyStack.length = 0; 
-    historyIndex = -1;
-    saveHistory(); 
-
+    // [안전장치] HTML 파싱 에러 방지를 위해 임시 div 사용
+    const tempContainer = document.createElement('div');
+    tempContainer.innerHTML = sourceInput.value;
+    
+    // 테이블 레이아웃 강제 교정 (선택사항)
+    // tempContainer.querySelectorAll('table').forEach(tbl => tbl.style.tableLayout = 'fixed');
+    
+    previewDiv.innerHTML = tempContainer.innerHTML;
+    
+    historyStack.length = 0; historyIndex = -1; saveHistory();
     attachEvents(previewDiv);
 }
 
-function calculateAll() {
-    runCalculationPass();
-    runCalculationPass();
-    updateTooltips();
-}
+function calculateAll() { runCalculationPass(); runCalculationPass(); updateTooltips(); }
 
 function runCalculationPass() {
     const tables = previewDiv.querySelectorAll('table');
     if(tables.length === 0) return;
     tables.forEach(table => {
         const grid = mapTableToGrid(table);
-        const formulaElements = table.querySelectorAll('[data-dze-formula]');
-        formulaElements.forEach(el => {
-            let formula = el.getAttribute('data-dze-formula');
-            let safeFormula = formula;
+        table.querySelectorAll('[data-dze-formula]').forEach(el => {
+            let formula = el.getAttribute('data-dze-formula'), safeFormula = formula;
             try {
                 if(safeFormula.startsWith('=')) safeFormula = safeFormula.substring(1);
                 if(safeFormula.includes("SUM")) safeFormula = safeFormula.replace(/SUM\(([^)]+)\)/g, (m, a) => a.includes(':') ? getRangeSum(grid, a).toString() : m);
                 safeFormula = safeFormula.replace(/\b[A-Z]+[0-9]+\b/g, (ref) => getVal(grid, ref) < 0 ? `(${getVal(grid, ref)})` : getVal(grid, ref));
                 safeFormula = safeFormula.replace(/([0-9.]+)%/g, "$1*0.01");
                 if(safeFormula.includes("PRODUCT")) safeFormula = safeFormula.replace(/PRODUCT\(([^)]+)\)/g, (m, a) => { let r=1; a.split(',').forEach(p=>r*=parseFloat(new Function('return '+p)())); return r; });
-                if(safeFormula.includes("SUM")) safeFormula = safeFormula.replace(/SUM\(([^)]+)\)/g, (m, a) => { let r=0; a.split(',').forEach(p=>r+=parseFloat(new Function('return '+p)())); return r; });
                 let resultValue = new Function('return ' + safeFormula)();
                 const pTag = el.querySelector('p') || el;
-                const hasSep = el.getAttribute('dze_format_separator') === ',';
                 let displayVal = Math.round(resultValue);
-                if(hasSep) displayVal = displayVal.toLocaleString();
+                if(el.getAttribute('dze_format_separator') === ',') displayVal = displayVal.toLocaleString();
                 pTag.innerText = displayVal;
-                const addr = el.getAttribute('data-addr');
-                if(addr) grid[addr] = resultValue;
+                const addr = el.getAttribute('data-addr'); if(addr) grid[addr] = resultValue;
             } catch (e) { }
         });
     });
@@ -127,29 +125,148 @@ function updateTooltips() {
     });
 }
 
+/* --- Global Resize Logic --- */
+document.addEventListener('mousemove', (e) => {
+    if (!isResizing || !resizeTarget) return;
+
+    let newPixelVal = 0;
+    
+    // 1. 변화량 계산
+    if (resizeType === 'col') {
+        const diff = e.clientX - resizeStartPos;
+        newPixelVal = Math.max(10, resizeStartVal + diff);
+    } else if (resizeType === 'row') {
+        const diff = e.clientY - resizeStartPos;
+        newPixelVal = Math.max(10, resizeStartVal + diff);
+    }
+
+    // 2. 적용 (style.width + width 속성 + col 태그)
+    let finalVal = '';
+    if (resizeUnit === '%') {
+        const newPercent = (newPixelVal / resizeParentSize) * 100;
+        finalVal = newPercent.toFixed(2) + '%';
+    } else {
+        finalVal = newPixelVal + 'px';
+    }
+
+    if (resizeType === 'col') {
+        resizeTarget.style.width = finalVal;
+        resizeTarget.setAttribute('width', finalVal); 
+        
+        // [안전장치] <col> 태그가 존재할 때만 변경
+        if(targetColElement && targetColElement.parentNode) {
+            targetColElement.style.width = finalVal;
+            targetColElement.setAttribute('width', finalVal);
+        }
+    } else {
+        resizeTarget.style.height = finalVal;
+        resizeTarget.setAttribute('height', finalVal);
+        if(resizeTarget.parentElement) resizeTarget.parentElement.style.height = finalVal;
+    }
+});
+
+document.addEventListener('mouseup', () => {
+    if (isResizing) {
+        isResizing = false; resizeTarget = null; resizeType = null; targetColElement = null;
+        document.body.classList.remove('is-resizing', 'is-resizing-col', 'is-resizing-row');
+        saveHistory();
+    }
+    isDragging = false;
+});
+
 function attachEvents(container) {
     const tables = container.querySelectorAll('table');
     tables.forEach(table => {
-        initCoordinates(table);
-        updateTooltips();
+        initCoordinates(table); updateTooltips();
+
+        // 1. Mouse Move (Resize Detection)
+        table.addEventListener('mousemove', function(e) {
+            if (isResizing) return;
+            const td = e.target.closest('td');
+            if (!td) return;
+            const rect = td.getBoundingClientRect();
+            const rightDist = Math.abs(rect.right - e.clientX);
+            const bottomDist = Math.abs(rect.bottom - e.clientY);
+            const sensitive = 5;
+
+            td.removeAttribute('data-resize-col');
+            td.removeAttribute('data-resize-row');
+            table.style.cursor = '';
+
+            // 오른쪽 끝 감지
+            if (rightDist <= sensitive) {
+                td.setAttribute('data-resize-col', 'true'); table.style.cursor = 'col-resize';
+            } 
+            // 아래쪽 끝 감지
+            else if (bottomDist <= sensitive) {
+                td.setAttribute('data-resize-row', 'true'); table.style.cursor = 'row-resize';
+            }
+        });
+
+        // 2. Mouse Down (Start Resize vs Drag)
         table.addEventListener('mousedown', function(e) {
             const td = e.target.closest('td');
             if (!td) return;
+
+            // [Resizing Start]
+            if (td.getAttribute('data-resize-col') === 'true') {
+                isResizing = true; resizeType = 'col'; resizeTarget = td;
+                resizeStartVal = td.getBoundingClientRect().width; 
+                resizeStartPos = e.clientX;
+                
+                targetColElement = null;
+                const colIdx = parseInt(td.getAttribute('data-col'));
+                const colgroup = table.querySelector('colgroup');
+                if(colgroup) {
+                    const cols = colgroup.querySelectorAll('col');
+                    if(cols[colIdx]) targetColElement = cols[colIdx];
+                }
+
+                if (td.style.width && td.style.width.includes('%')) {
+                    resizeUnit = '%';
+                    resizeParentSize = table.getBoundingClientRect().width;
+                } else {
+                    resizeUnit = 'px';
+                }
+
+                document.body.classList.add('is-resizing', 'is-resizing-col');
+                e.preventDefault(); return;
+            }
+
+            if (td.getAttribute('data-resize-row') === 'true') {
+                isResizing = true; resizeType = 'row'; resizeTarget = td;
+                resizeStartVal = td.getBoundingClientRect().height;
+                resizeStartPos = e.clientY;
+
+                if (td.style.height && td.style.height.includes('%')) {
+                    resizeUnit = '%';
+                    resizeParentSize = table.getBoundingClientRect().height;
+                } else {
+                    resizeUnit = 'px';
+                }
+
+                document.body.classList.add('is-resizing', 'is-resizing-row');
+                e.preventDefault(); return;
+            }
+
+            // [Cell Selection]
             container.querySelectorAll('.selected-cell').forEach(c => c.classList.remove('selected-cell'));
             const editing = container.querySelector('.editing-cell');
-            if (editing && editing !== td) finishEdit(editing); 
+            if (editing && editing !== td) finishEdit(editing);
             isDragging = true; startCell = td; currentTable = table;
-            selectCell(td); previewDiv.focus();
+            selectCell(td); 
+            // [수정] 포커스 강제 이동 제거 (스크롤 튐 방지)
+            // previewDiv.focus(); 
         });
+
         table.addEventListener('mouseover', function(e) {
-            if (!isDragging) return;
-            const td = e.target.closest('td');
-            if (!td || table !== currentTable) return;
+            if (isResizing || !isDragging) return;
+            const td = e.target.closest('td'); if (!td || table !== currentTable) return;
             selectRange(currentTable, startCell, td);
         });
+
         table.addEventListener('dblclick', function(e) {
-            const td = e.target.closest('td');
-            if (!td) return;
+            const td = e.target.closest('td'); if (!td) return;
             if(td.hasAttribute('data-dze-formula')) { alert("수식 셀은 수정 불가"); return; }
             makeEditable(td);
         });
@@ -160,67 +277,44 @@ function attachEvents(container) {
     previewDiv.addEventListener('keydown', function(e) {
         if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
         if (((e.ctrlKey || e.metaKey) && e.key === 'y') || ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z')) { e.preventDefault(); redo(); return; }
-
         if (e.key === 'Delete') {
             const selectedCells = previewDiv.querySelectorAll('.selected-cell');
             if(selectedCells.length > 0) {
-                selectedCells.forEach(td => {
-                    if(!td.hasAttribute('data-dze-formula')) {
-                        const pTag = td.querySelector('p');
-                        if(pTag) pTag.innerText = ""; else td.innerText = "";
-                    }
-                });
-                calculateAll();
-                saveHistory(); 
+                selectedCells.forEach(td => { if(!td.hasAttribute('data-dze-formula')) { const p=td.querySelector('p'); if(p) p.innerText=""; else td.innerText=""; } });
+                calculateAll(); saveHistory(); 
             }
         }
     });
 }
 
-let isDragging = false; let startCell = null; let currentTable = null;
-
-// Helpers
+// --- Helper Functions ---
 function initCoordinates(table) {
-    const matrix = [];
-    const rows = table.rows;
+    const matrix = []; const rows = table.rows;
     for(let r=0; r<rows.length; r++) {
-        if(!matrix[r]) matrix[r] = [];
-        const cells = rows[r].cells;
-        let colIdx = 0;
+        if(!matrix[r]) matrix[r] = []; const cells = rows[r].cells; let colIdx = 0;
         for(let c=0; c<cells.length; c++) {
             while(matrix[r][colIdx]) colIdx++;
-            const cell = cells[c];
-            const rowspan = cell.rowSpan || 1;
-            const colspan = cell.colSpan || 1;
-            cell.setAttribute('data-row', r); cell.setAttribute('data-col', colIdx);
-            for(let i=0; i<rowspan; i++) for(let j=0; j<colspan; j++) { if(!matrix[r+i]) matrix[r+i]=[]; matrix[r+i][colIdx+j]=true; }
-            colIdx += colspan;
+            const cell = cells[c]; cell.setAttribute('data-row', r); cell.setAttribute('data-col', colIdx);
+            const rs = cell.rowSpan || 1, cs = cell.colSpan || 1;
+            for(let i=0; i<rs; i++) for(let j=0; j<cs; j++) { if(!matrix[r+i]) matrix[r+i]=[]; matrix[r+i][colIdx+j]=true; } colIdx += cs;
         }
     }
 }
 function mapTableToGrid(table) {
-    const grid = {};
-    table.querySelectorAll('td').forEach(td => {
-        const r = parseInt(td.getAttribute('data-row'));
-        const c = parseInt(td.getAttribute('data-col'));
-        const address = `${getColLetter(c)}${r + 1}`;
-        let text = td.innerText.replace(/,/g, '').trim();
-        let val = (text === "") ? 0 : parseFloat(text);
-        grid[address] = isNaN(val) ? 0 : val;
-        td.setAttribute('data-addr', address);
-    });
-    return grid;
+    const grid = {}; table.querySelectorAll('td').forEach(td => {
+        const r = parseInt(td.getAttribute('data-row')), c = parseInt(td.getAttribute('data-col'));
+        const addr = `${getColLetter(c)}${r + 1}`;
+        let text = td.innerText.replace(/,/g, '').trim(); let val = text===""?0:parseFloat(text);
+        grid[addr] = isNaN(val) ? 0 : val; td.setAttribute('data-addr', addr);
+    }); return grid;
 }
 function getColLetter(i) { let l=''; while(i>=0){ l=String.fromCharCode((i%26)+65)+l; i=Math.floor(i/26)-1; } return l; }
 function getVal(g, r) { return g[r] !== undefined ? g[r] : 0; }
 function getRangeSum(g, r) {
-    const [s, e] = r.split(':');
-    const sc = s.match(/[A-Z]+/)[0], ec = e.match(/[A-Z]+/)[0];
+    const [s, e] = r.split(':'); const sc = s.match(/[A-Z]+/)[0], ec = e.match(/[A-Z]+/)[0];
     const sr = parseInt(s.match(/\d+/)[0]), er = parseInt(e.match(/\d+/)[0]);
-    const sci = colToNum(sc), eci = colToNum(ec);
-    let sum = 0;
-    for(let i=sr; i<=er; i++) for(let j=sci; j<=eci; j++) sum += getVal(g, `${getColLetter(j)}${i}`);
-    return sum;
+    const sci = colToNum(sc), eci = colToNum(ec); let sum = 0;
+    for(let i=sr; i<=er; i++) for(let j=sci; j<=eci; j++) sum += getVal(g, `${getColLetter(j)}${i}`); return sum;
 }
 function colToNum(c) { let n=0; for(let i=0; i<c.length; i++) n=n*26+c.charCodeAt(i)-64; return n-1; }
 function selectRange(t, s, e) {
@@ -241,6 +335,38 @@ function makeEditable(td) {
 }
 function finishEdit(td) {
     td.classList.remove('editing-cell'); td.setAttribute('contenteditable', 'false'); td.onkeydown=null; td.onblur=null;
-    calculateAll();
-    saveHistory(); 
+    calculateAll(); saveHistory(); 
+}
+
+/* --- Export Helpers --- */
+function getCleanHTML() {
+    const clone = previewDiv.cloneNode(true);
+    const dirtyClasses = ['selected-cell', 'editing-cell', 'drag-over'];
+    dirtyClasses.forEach(c => clone.querySelectorAll('.' + c).forEach(el => el.classList.remove(c)));
+    clone.querySelectorAll('*[class=""]').forEach(el => el.removeAttribute('class'));
+    const dirtyAttrs = ['data-row', 'data-col', 'data-addr', 'data-tooltip', 'data-org-title', 'contenteditable', 'spellcheck', 'data-resize-col', 'data-resize-row'];
+    clone.querySelectorAll('*').forEach(el => {
+        dirtyAttrs.forEach(a => el.removeAttribute(a));
+        if(el.hasAttribute('data-org-title')) { el.setAttribute('title', el.getAttribute('data-org-title')); el.removeAttribute('data-org-title'); }
+        if(el.getAttribute('style') === '') el.removeAttribute('style');
+    });
+    return clone.innerHTML.replace(/></g, '>\n<').trim();
+}
+
+function copyPreviewHTML() {
+    const html = getCleanHTML();
+    if(!html) { alert("내용이 없습니다."); return; }
+    navigator.clipboard.writeText(html).then(() => alert("깨끗한 HTML이 복사되었습니다.")).catch(()=>alert("실패"));
+}
+
+function exportToCSharp() {
+    const html = getCleanHTML();
+    if(!html) { alert("내용이 없습니다."); return; }
+    const lines = html.split('\n');
+    let code = 'StringBuilder sb = new StringBuilder();\n';
+    lines.forEach(l => {
+        if(l.trim()==='') return;
+        code += `sb.AppendLine($@"${l.replace(/"/g, '""').replace(/\r/g, '')}");\n`;
+    });
+    navigator.clipboard.writeText(code).then(() => alert("C# 코드 복사 완료.")).catch(()=>alert("실패"));
 }
