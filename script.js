@@ -316,7 +316,7 @@ previewDiv.addEventListener('keydown', function(e) {
     if (e.target.closest('[contenteditable="true"], input, textarea, select')) return;
     if (!previewDiv.querySelector('.selected-cell')) return;
     e.preventDefault();
-    copySelectedCells(e.shiftKey ? 'amaranth' : 'table');
+    copySelectedCells();
 });
 
 previewDiv.addEventListener('copy', function(e) {
@@ -355,17 +355,16 @@ function getSelectedCellRows() {
     return rows;
 }
 
-function getTableClipboardData(format = 'table') {
+function getTableClipboardData(format = 'amaranth') {
     const rows = getSelectedCellRows();
     if (!rows.length) return null;
 
-    // MA100100은 순번, 빈 값, 품명, 빈 값, ... 순서로 읽는다.
-    const clipboardRows = rows.map(row => format === 'amaranth'
-        ? row.flatMap((value, index) => index === 0 ? [value] : ['', value])
-        : row);
-    const text = clipboardRows.map(row => row.join('\t')).join('\r\n');
+    // 실제 그룹웨어처럼 값 다음에 빈 줄을 둔다. 10열은 행마다 20줄이다.
+    const text = format === 'amaranth'
+        ? rows.flatMap(row => row.flatMap(value => [value, ''])).join('\n')
+        : rows.map(row => row.join('\t')).join('\r\n');
     const table = document.createElement('table');
-    clipboardRows.forEach(row => {
+    rows.forEach(row => {
         const tr = table.insertRow();
         row.forEach(value => { tr.insertCell().textContent = value; });
     });
@@ -373,7 +372,7 @@ function getTableClipboardData(format = 'table') {
     return { text, html: table.outerHTML, message: `${rows.length}행 ${rows[0].length}열을 ${label} 복사했습니다.` };
 }
 
-async function copySelectedCells(format = 'table') {
+async function copySelectedCells(format = 'amaranth') {
     const data = getTableClipboardData(format);
     if (!data) {
         setCopyStatus('복사할 셀을 드래그로 선택해주세요.', true);
@@ -513,5 +512,4 @@ function printPreview() {
     
     printWindow.document.close();
 }
-
 
