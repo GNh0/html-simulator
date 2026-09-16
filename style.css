@@ -71,13 +71,13 @@ body {
 
 /* --- Table & Interaction --- */
 table { border-collapse: collapse; user-select: none; cursor: default; margin: 0 auto; }
-td { 
+td, th {
     border: 1px solid #dee2e6;
     min-width: 30px; padding: 4px; 
     font-size: 12px; transition: background 0.1s; position: relative; 
 }
-td.selected-cell { background-color: #cfe2ff !important; border: 1px double #0d6efd; z-index: 1; }
-td.editing-cell { background-color: #fff !important; outline: 2px solid #0d6efd; user-select: text; cursor: text; z-index: 2; }
+td.selected-cell, th.selected-cell { background-color: #cfe2ff !important; border: 1px double #0d6efd; z-index: 1; }
+td.editing-cell, th.editing-cell { background-color: #fff !important; outline: 2px solid #0d6efd; user-select: text; cursor: text; z-index: 2; }
 
 /* Resizing Cursors */
 body.is-resizing { user-select: none; }

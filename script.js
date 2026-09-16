@@ -63,6 +63,7 @@ if(sourceInput) {
 
 // --- Core Functions ---
 function renderCode() {
+    setCopyStatus('');
     if(!sourceInput.value.trim()) { previewDiv.innerHTML = ""; return; }
     
     // HTML 파싱 에러 방지
@@ -172,8 +173,8 @@ function attachEvents(container) {
 
         table.addEventListener('mousemove', function(e) {
             if (isResizing) return;
-            const td = e.target.closest('td');
-            if (!td) return;
+            const td = e.target.closest('td, th');
+            if (!td || td.closest('table') !== table) return;
             const rect = td.getBoundingClientRect();
             const rightDist = Math.abs(rect.right - e.clientX);
             const bottomDist = Math.abs(rect.bottom - e.clientY);
@@ -189,8 +190,9 @@ function attachEvents(container) {
         });
 
         table.addEventListener('mousedown', function(e) {
-            const td = e.target.closest('td');
-            if (!td) return;
+            const td = e.target.closest('td, th');
+            if (e.button !== 0 || !td || td.closest('table') !== table) return;
+            if (td.isContentEditable || e.target.closest('input, textarea, select, button, a[href]')) return;
 
             if (td.getAttribute('data-resize-col') === 'true') {
                 isResizing = true; resizeType = 'col'; resizeTarget = td;
@@ -223,17 +225,19 @@ function attachEvents(container) {
             const editing = container.querySelector('.editing-cell');
             if (editing && editing !== td) finishEdit(editing);
             isDragging = true; startCell = td; currentTable = table;
-            selectCell(td); 
+            selectCell(td);
+            previewDiv.focus({ preventScroll: true });
+            e.preventDefault();
         });
 
         table.addEventListener('mouseover', function(e) {
             if (isResizing || !isDragging) return;
-            const td = e.target.closest('td'); if (!td || table !== currentTable) return;
+            const td = e.target.closest('td, th'); if (!td || td.closest('table') !== table || table !== currentTable) return;
             selectRange(currentTable, startCell, td);
         });
 
         table.addEventListener('dblclick', function(e) {
-            const td = e.target.closest('td'); if (!td) return;
+            const td = e.target.closest('td, th'); if (!td || td.closest('table') !== table) return;
             if(td.hasAttribute('data-dze-formula')) { alert("수식 셀은 수정 불가"); return; }
             makeEditable(td);
         });
@@ -288,7 +292,8 @@ function selectRange(t, s, e) {
     t.parentElement.querySelectorAll('.selected-cell').forEach(c => c.classList.remove('selected-cell'));
     const r1=parseInt(s.getAttribute('data-row')), c1=parseInt(s.getAttribute('data-col'));
     const r2=parseInt(e.getAttribute('data-row')), c2=parseInt(e.getAttribute('data-col'));
-    t.querySelectorAll('td').forEach(td => {
+    t.querySelectorAll('td, th').forEach(td => {
+        if (td.closest('table') !== t) return;
         const r=parseInt(td.getAttribute('data-row')), c=parseInt(td.getAttribute('data-col'));
         if(r>=Math.min(r1,r2) && r<=Math.max(r1,r2) && c>=Math.min(c1,c2) && c<=Math.max(c1,c2)) td.classList.add('selected-cell');
     });
@@ -303,6 +308,121 @@ function makeEditable(td) {
 function finishEdit(td) {
     td.classList.remove('editing-cell'); td.setAttribute('contenteditable', 'false'); td.onkeydown=null; td.onblur=null;
     calculateAll(); saveHistory(); 
+}
+
+/* --- Table Clipboard --- */
+previewDiv.addEventListener('keydown', function(e) {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== 'c') return;
+    if (e.target.closest('[contenteditable="true"], input, textarea, select')) return;
+    if (!previewDiv.querySelector('.selected-cell')) return;
+    e.preventDefault();
+    copySelectedCells(e.shiftKey ? 'amaranth' : 'table');
+});
+
+previewDiv.addEventListener('copy', function(e) {
+    if (e.target.closest('[contenteditable="true"], input, textarea, select')) return;
+    const data = getTableClipboardData();
+    if (!data || !e.clipboardData) return;
+    e.clipboardData.setData('text/plain', data.text);
+    e.clipboardData.setData('text/html', data.html);
+    e.preventDefault();
+    setCopyStatus(data.message);
+});
+
+function setCopyStatus(message, failed = false) {
+    const status = document.getElementById('copyStatus');
+    status.textContent = message;
+    status.classList.toggle('text-danger', failed);
+    status.classList.toggle('text-success', !!message && !failed);
+}
+
+function getSelectedCellRows() {
+    const cells = Array.from(previewDiv.querySelectorAll('td.selected-cell, th.selected-cell'));
+    if (!cells.length) return [];
+    const table = cells[0].closest('table');
+    const selected = cells.filter(cell => cell.closest('table') === table);
+    const firstRow = Math.min(...selected.map(cell => Number(cell.dataset.row)));
+    const firstCol = Math.min(...selected.map(cell => Number(cell.dataset.col)));
+    const lastRow = Math.max(...selected.map(cell => Number(cell.dataset.row) + cell.rowSpan - 1));
+    const lastCol = Math.max(...selected.map(cell => Number(cell.dataset.col) + cell.colSpan - 1));
+    const rows = Array.from({ length: lastRow - firstRow + 1 }, () => Array(lastCol - firstCol + 1).fill(''));
+
+    selected.forEach(cell => {
+        // 셀 안의 줄바꿈/탭이 붙여넣을 행과 열을 바꾸지 않도록 처리한다.
+        rows[Number(cell.dataset.row) - firstRow][Number(cell.dataset.col) - firstCol] =
+            cell.innerText.replace(/\u00a0/g, ' ').replace(/[\t\r\n]+/g, ' ').trim();
+    });
+    return rows;
+}
+
+function getTableClipboardData(format = 'table') {
+    const rows = getSelectedCellRows();
+    if (!rows.length) return null;
+
+    // MA100100은 순번, 빈 값, 품명, 빈 값, ... 순서로 읽는다.
+    const clipboardRows = rows.map(row => format === 'amaranth'
+        ? row.flatMap((value, index) => index === 0 ? [value] : ['', value])
+        : row);
+    const text = clipboardRows.map(row => row.join('\t')).join('\r\n');
+    const table = document.createElement('table');
+    clipboardRows.forEach(row => {
+        const tr = table.insertRow();
+        row.forEach(value => { tr.insertCell().textContent = value; });
+    });
+    const label = format === 'amaranth' ? '아마란스 형식으로' : '표로';
+    return { text, html: table.outerHTML, message: `${rows.length}행 ${rows[0].length}열을 ${label} 복사했습니다.` };
+}
+
+async function copySelectedCells(format = 'table') {
+    const data = getTableClipboardData(format);
+    if (!data) {
+        setCopyStatus('복사할 셀을 드래그로 선택해주세요.', true);
+        return;
+    }
+    try {
+        await writeTableClipboard(data.text, data.html);
+        setCopyStatus(data.message);
+    } catch (error) {
+        setCopyStatus('복사하지 못했습니다. 브라우저의 클립보드 권한을 확인해주세요.', true);
+    }
+}
+
+async function writeTableClipboard(text, html) {
+    if (navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem !== 'undefined') {
+        try {
+            await navigator.clipboard.write([new ClipboardItem({
+                'text/plain': new Blob([text], { type: 'text/plain' }),
+                'text/html': new Blob([html], { type: 'text/html' })
+            })]);
+            return;
+        } catch (error) {
+            // 파일로 열거나 Clipboard API를 사용할 수 없는 경우 copy 이벤트를 사용한다.
+        }
+    }
+
+    const previousFocus = document.activeElement;
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.cssText = 'position:fixed;left:-9999px;top:0;';
+    document.body.appendChild(textarea);
+    textarea.select();
+    let copied = false;
+    const onCopy = event => {
+        if (!event.clipboardData) return;
+        event.clipboardData.setData('text/plain', text);
+        event.clipboardData.setData('text/html', html);
+        event.preventDefault();
+        copied = true;
+    };
+    document.addEventListener('copy', onCopy);
+    try {
+        if (!document.execCommand('copy') || !copied) throw new Error('Clipboard copy failed');
+    } finally {
+        document.removeEventListener('copy', onCopy);
+        textarea.remove();
+        if (previousFocus && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
+    }
 }
 
 /* --- Export Helpers --- */
